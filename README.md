@@ -26,7 +26,7 @@ Mock ItrLoader 프로젝트의 시나리오를 생성하고 관리하는 MCP(Mod
 |------|------|------|
 | `scenario_build_simple_auth` | [개인] 간편인증 flow 시나리오 생성 | cert_request → cert_response → check → load |
 | `scenario_build_common_cert` | [개인] 공동인증서 flow 시나리오 생성 | check (common_cert) → load |
-| `scenario_build_corp_common_cert` | [법인] 공동인증서 flow 시나리오 생성 | check (common_cert) → corp_load_calc |
+| `scenario_build_corp_common_cert` | [법인] 공동인증서 flow 시나리오 생성 | corp_check (common_cert) → corp_load_calc |
 
 #### 실패 시나리오 생성 도구
 
@@ -171,7 +171,7 @@ AI: scenario_build_common_cert 도구를 사용합니다.
 AI: scenario_build_corp_common_cert 도구를 사용합니다.
 
 생성된 시나리오:
-- Flow: check (common_cert) → corp_load_calc
+- Flow: corp_check (common_cert) → corp_load_calc
 - 사업체명: 주식회사 테스트사업자
 ```
 
@@ -275,7 +275,7 @@ mypy src
 
 #### 3. [법인] 공동인증서 Flow
 ```
-인증서정보 → check (common_cert) → corp_load_calc
+인증서정보 → corp_check (common_cert) → corp_load_calc
 ```
 
 ### 주요 에러 타입

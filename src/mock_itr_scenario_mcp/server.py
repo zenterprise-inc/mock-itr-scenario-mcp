@@ -1541,7 +1541,7 @@ async def handle_scenario_build_common_cert(arguments: dict[str, Any]) -> list[T
 
 
 async def handle_scenario_build_corp_common_cert(arguments: dict[str, Any]) -> list[TextContent]:
-    """[법인] 공동인증서 flow 시나리오 생성: check -> corp_load_calc"""
+    """[법인] 공동인증서 flow 시나리오 생성: corp_check -> corp_load_calc"""
     biz_name = arguments.get("biz_name", "주식회사 테스트사업자")
     biz_no = arguments.get("biz_no", "1234104321")
     ceo_name = arguments.get("ceo_name", "테스트대표자")
@@ -1555,16 +1555,21 @@ async def handle_scenario_build_corp_common_cert(arguments: dict[str, Any]) -> l
         sign_pw="cert_password",
     )
     
-    # 1. check: 공동인증서로 tin, cookies 반환
-    check_request = build_check_request_data(common_cert=common_cert)
-    check_response = build_check_response(
+    # 1. corp_check: 공동인증서로 tin, cookies 반환
+    corp_check_request = build_corp_check_request_data(
+        common_cert=common_cert,
+    )
+    corp_check_response = build_corp_check_response(
         success=True,
+        biz_name=biz_name,
+        biz_no=biz_no,
+        ceo_name=ceo_name,
         tin=taxpayer_info.tin,
     )
     
     # 2. corp_load_calc: cookies로 법인 수집 및 계산
     corp_load_calc_request = build_corp_load_calc_request_data(
-        cookies=check_response.get("result", {}).get("cookies"),
+        cookies=corp_check_response.get("result", {}).get("cookies"),
         export_file_prefix=taxpayer_info.tin,
         tin=taxpayer_info.tin,
     )
@@ -1583,10 +1588,10 @@ async def handle_scenario_build_corp_common_cert(arguments: dict[str, Any]) -> l
         description=f"[법인] 공동인증서 flow: {biz_name}의 법인 조회 시나리오",
         taxpayer_info=taxpayer_info,
         biz_type=BizType.CORP,
-        check_config=ActionConfig(
+        corp_check_config=ActionConfig(
             success=True,
-            request_data=check_request,
-            response_data=check_response,
+            request_data=corp_check_request,
+            response_data=corp_check_response,
         ),
         corp_load_calc_config=ActionConfig(
             success=True,

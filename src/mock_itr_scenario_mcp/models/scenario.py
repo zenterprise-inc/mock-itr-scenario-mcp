@@ -260,6 +260,7 @@ class ScenarioConfig(BaseModel):
     check_config: ActionConfig = Field(default_factory=ActionConfig, description="check 설정")
     load_config: ActionConfig = Field(default_factory=ActionConfig, description="load 설정")
     calc_config: ActionConfig = Field(default_factory=ActionConfig, description="calc 설정")
+    corp_check_config: ActionConfig = Field(default_factory=ActionConfig, description="corp_check 설정")
     corp_load_calc_config: ActionConfig = Field(default_factory=ActionConfig, description="corp_load_calc 설정")
     
     # 진행률 설정
