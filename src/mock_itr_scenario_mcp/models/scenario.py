@@ -1,7 +1,7 @@
 """Scenario configuration models."""
 
 from typing import Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .enums import BizType, CertType
 
@@ -74,8 +74,7 @@ class RefundResult(BaseModel):
     사회보험료_환급액: int = Field(default=0, alias="사회보험료_환급액")
     중소기업특별세액_환급액: int = Field(default=0, alias="중소기업특별세액_환급액")
     
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class VersionInfo(BaseModel):
