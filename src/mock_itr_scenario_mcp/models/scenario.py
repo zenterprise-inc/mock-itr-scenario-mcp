@@ -21,10 +21,16 @@ class TaxpayerInfo(BaseModel):
     tax_office_name: str = Field(default="강남세무서", description="관할세무서명")
 
 
+def get_default_model_year() -> str:
+    """환경변수에서 귀속연도 가져오기 (기본값: 2024)"""
+    import os
+    return os.environ.get("MOCK_ITR_MODEL_YEAR", "2024")
+
+
 class MetaInfo(BaseModel):
     """메타 정보"""
     client_id: str = Field(default="bznav-refund-mock", description="클라이언트 ID")
-    model_year: str = Field(default="2024", description="귀속연도")
+    model_year: str = Field(default_factory=get_default_model_year, description="귀속연도")
 
 
 class CertInfo(BaseModel):

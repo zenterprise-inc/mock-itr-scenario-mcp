@@ -265,6 +265,8 @@ def build_load_response(
     """load 응답 데이터 생성"""
     if success and refund_result:
         tin = taxpayer_info.tin if taxpayer_info else "000000154401000000"
+        # 환경변수에서 귀속연도 가져오기
+        model_year = os.environ.get("MOCK_ITR_MODEL_YEAR", "2024")
         response = LoadResponse(
             error={"status": False, "type": "", "msg": ""},
             result={
@@ -273,7 +275,7 @@ def build_load_response(
                 "결과데이터_key": f"{tin}_result_data.json",
                 "납세자명": taxpayer_info.tax_office_name if taxpayer_info else "테스트납세자",
                 "총환급세액": float(refund_result.total_refund),
-                "버전정보": version_info or {"연도": "2024", "버전": "1.0"},
+                "버전정보": version_info or {"연도": model_year, "버전": "1.0"},
                 "신고자": taxpayer_info.tax_office_name if taxpayer_info else "테스트납세자",
                 "주민등록번호": "",
                 "관할세무서": taxpayer_info.tax_office_name if taxpayer_info else "강남세무서",
@@ -283,7 +285,7 @@ def build_load_response(
                 "감면Only환급가능금액": 0.0,
                 "고용보험조회필요": False,
                 "전자신고": True,
-                "최근계산연도": 2024,
+                "최근계산연도": int(model_year),
                 "사업장": {
                     "2019": {},
                     "2020": {},
