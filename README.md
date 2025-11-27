@@ -6,6 +6,8 @@ Mock ItrLoader 프로젝트의 시나리오를 생성하고 관리하는 MCP(Mod
 
 ### MCP Tools
 
+#### 기본 도구
+
 | 도구 | 설명 |
 |------|------|
 | `template_list` | 사용 가능한 시나리오 템플릿 목록 조회 |
@@ -16,6 +18,22 @@ Mock ItrLoader 프로젝트의 시나리오를 생성하고 관리하는 MCP(Mod
 | `scenario_validate` | 시나리오 유효성 검사 |
 | `scenario_assign` | 시나리오를 user_ern에 할당 |
 | `scenario_unassign` | 시나리오 할당 해제 |
+| `error_types_list` | 지원하는 에러 타입 목록 조회 |
+
+#### Flow별 시나리오 생성 도구
+
+| 도구 | 설명 | Flow |
+|------|------|------|
+| `scenario_build_simple_auth` | [개인] 간편인증 flow 시나리오 생성 | cert_request → cert_response → check → load |
+| `scenario_build_common_cert` | [개인] 공동인증서 flow 시나리오 생성 | check (common_cert) → load |
+| `scenario_build_corp_common_cert` | [법인] 공동인증서 flow 시나리오 생성 | check (common_cert) → corp_load_calc |
+
+#### 실패 시나리오 생성 도구
+
+| 도구 | 설명 |
+|------|------|
+| `scenario_build_simple_auth_fail` | 간편인증 요청(cert_request) 실패 시나리오 생성 |
+| `scenario_build_cert_response_fail` | 간편인증 완료 확인(cert_response) 실패 시나리오 생성 |
 
 ### MCP Resources
 
@@ -114,6 +132,75 @@ AI: scenario_build_normal 도구를 사용합니다.
 - 사업자 유형: 개인사업자
 ```
 
+### Flow별 시나리오 생성
+
+#### 간편인증 Flow (개인)
+
+```
+사용자: "카카오 간편인증으로 500만원 환급 시나리오 만들어줘"
+
+AI: scenario_build_simple_auth 도구를 사용합니다.
+
+생성된 시나리오:
+- Flow: cert_request → cert_response → check → load
+- 사용자: 테스트사용자
+- 간편인증: 카카오
+- 환급액: 5,000,000원
+```
+
+#### 공동인증서 Flow (개인)
+
+```
+사용자: "공동인증서로 200만원 환급 시나리오 만들어줘"
+
+AI: scenario_build_common_cert 도구를 사용합니다.
+
+생성된 시나리오:
+- Flow: check (common_cert) → load
+- 환급액: 2,000,000원
+```
+
+#### 공동인증서 Flow (법인)
+
+```
+사용자: "법인 공동인증서 시나리오 만들어줘"
+
+AI: scenario_build_corp_common_cert 도구를 사용합니다.
+
+생성된 시나리오:
+- Flow: check (common_cert) → corp_load_calc
+- 사업체명: 주식회사 테스트사업자
+```
+
+### 실패 시나리오 생성
+
+#### 간편인증 요청 실패
+
+```
+사용자: "카카오 간편인증 요청 실패 시나리오 만들어줘"
+
+AI: scenario_build_simple_auth_fail 도구를 사용합니다.
+
+생성된 시나리오:
+- cert_request: 실패
+- 에러 타입: 간편인증오류
+- 에러 메시지: "카카오톡 간편인증 요청에 실패했습니다. 사용자 정보를 확인해주세요."
+```
+
+#### 간편인증 완료 확인 실패
+
+```
+사용자: "간편인증 완료 확인 실패 시나리오 만들어줘"
+
+AI: scenario_build_cert_response_fail 도구를 사용합니다.
+
+생성된 시나리오:
+- cert_request: 성공
+- cert_response: 실패
+- 에러 타입: 간편인증미완료
+- 에러 메시지: "간편인증이 완료되지 않았습니다."
+```
+
 ### 에러 시나리오 생성
 
 ```
@@ -142,8 +229,39 @@ ruff check .
 mypy src
 ```
 
+## 시나리오 데이터 구조
+
+### 액션별 요청/응답 데이터
+
+각 시나리오 액션은 [Confluence 문서의 API 스펙](https://zenterprise.atlassian.net/wiki/spaces/BN2022/pages/4266000430/API)에 맞춰 요청/응답 데이터 구조를 포함합니다:
+
+- **cert_request**: 간편인증 요청 (user_info 기반)
+- **cert_response**: 간편인증 완료 확인 (user_info + cert_info 기반)
+- **check**: 사용자 검증 (token 또는 common_cert 기반, tin/cookies 반환)
+- **load**: 수집 및 계산 (cookies 기반, 환급 결과 반환)
+- **calc**: 계산 (export_file_prefix 기반)
+- **corp_load_calc**: 법인 수집 및 계산 (cookies 기반)
+
+### Flow 설명
+
+#### 1. [개인] 간편인증 Flow
+```
+사용자정보입력 → cert_request → 사용자 인증완료 → cert_response → check (token) → load
+```
+
+#### 2. [개인] 공동인증서 Flow
+```
+인증서정보 → check (common_cert) → load
+```
+
+#### 3. [법인] 공동인증서 Flow
+```
+인증서정보 → check (common_cert) → corp_load_calc
+```
+
 ## 참고 자료
 
 - [Mock ItrLoader](https://github.com/danny-zent/mock-itrLoader)
 - [MCP Specification](https://modelcontextprotocol.io/specification)
 - [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)
+- [비즈넵 환급 세액 계산 람다 API 가이드](https://zenterprise.atlassian.net/wiki/spaces/BN2022/pages/4266000430/API)
