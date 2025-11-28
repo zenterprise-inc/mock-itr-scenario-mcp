@@ -45,6 +45,18 @@ Mock ItrLoader 프로젝트의 시나리오를 생성하고 관리하는 MCP(Mod
 
 ## 설치
 
+### uv 설치
+
+uv가 설치되어 있지 않다면 다음 명령으로 설치할 수 있습니다.
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# 또는 macOS/Homebrew
+brew install astral-sh/uv/uv
+# Windows PowerShell
+irm https://astral.sh/uv/install.ps1 | iex
+```
+
 ```bash
 # uv 사용
 uv pip install -e .
@@ -52,6 +64,29 @@ uv pip install -e .
 # pip 사용
 pip install -e .
 ```
+
+### GitHub에서 MCP 서버 가져오기 및 등록 절차
+
+1. **GitHub 저장소 포크**
+   - 원본(Upstream): `https://github.com/danny-zent/mock-itr-scenario-mcp`
+   - 조직 또는 개인 GitHub 계정으로 Fork를 생성합니다.
+2. **포크한 저장소 클론**
+   ```bash
+   git clone https://github.com/<your-org-or-id>/mock-itr-scenario-mcp.git
+   cd mock-itr-scenario-mcp
+   ```
+3. **의존성 설치** (위 `설치` 절차 참고)
+3. **MCP 서버 경로 확인**  
+   - `command`: `uv`  
+   - `args`: `["run", "-m", "mock_itr_scenario_mcp.server"]`  
+   - `cwd`: 클론한 저장소 경로 (예: `/Users/danny/git/mock-itr-scenario-mcp`)
+4. **Cursor / Claude 설정 파일에 mcpServers 항목 추가**  
+   - Cursor: `~/.cursor/mcp.json`  
+   - Claude Desktop: `claude_desktop_config.json`  
+   - 아래 예시처럼 `mcpServers.mock-itr-scenario` 블록을 추가하고 환경변수를 원하는 값으로 세팅
+5. **에디터 재시작 또는 MCP 서버 새로 고침**  
+   - Cursor: `⌘K` → “Reload MCP Servers”  
+   - Claude Desktop: 설정 저장 후 앱 재시작
 
 ## 사용법
 
@@ -63,9 +98,9 @@ pip install -e .
 {
   "mcpServers": {
     "mock-itr-scenario": {
-      "command": "python",
-      "args": ["-m", "mock_itr_scenario_mcp.server"],
-      "cwd": "/path/to/mock-itr-scenario-mcp",
+      "command": "uv",
+      "args": ["run", "-m", "mock_itr_scenario_mcp.server"],
+      "cwd": "/Users/you/path/to/your-fork/mock-itr-scenario-mcp",
       "env": {
         "MOCK_ITR_MODEL_YEAR": "2024",
         "DYNAMODB_ENDPOINT_URL": "http://localhost:8000"
@@ -83,9 +118,9 @@ pip install -e .
 {
   "mcpServers": {
     "mock-itr-scenario": {
-      "command": "python",
-      "args": ["-m", "mock_itr_scenario_mcp.server"],
-      "cwd": "/path/to/mock-itr-scenario-mcp",
+      "command": "uv",
+      "args": ["run", "-m", "mock_itr_scenario_mcp.server"],
+      "cwd": "C:/Users/you/path/to/your-fork/mock-itr-scenario-mcp",
       "env": {
         "MOCK_ITR_MODEL_YEAR": "2024"
       }
