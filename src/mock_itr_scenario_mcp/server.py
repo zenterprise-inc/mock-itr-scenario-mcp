@@ -4,6 +4,9 @@ import asyncio
 import json
 import logging
 import os
+import uuid
+from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -968,6 +971,10 @@ async def handle_scenario_build_normal(arguments: dict[str, Any]) -> list[TextCo
             ),
         )
         
+        # scenario_id가 없으면 자동 생성
+        if not scenario.scenario_id:
+            scenario.scenario_id = f"NON_BIZ_{uuid.uuid4().hex[:8].upper()}"
+        
         return [TextContent(
             type="text",
             text=json.dumps(scenario.to_dict(), ensure_ascii=False, indent=2)
@@ -1018,6 +1025,11 @@ async def handle_scenario_build_normal(arguments: dict[str, Any]) -> list[TextCo
             response_data=load_response,
         ),
     )
+    
+    # scenario_id가 없으면 자동 생성
+    if not scenario.scenario_id:
+        biz_prefix = "INDIVIDUAL_BIZ" if biz_type == BizType.INDIVIDUAL_BIZ else "CORP"
+        scenario.scenario_id = f"{biz_prefix}_{uuid.uuid4().hex[:8].upper()}"
     
     return [TextContent(
         type="text",
@@ -1244,6 +1256,18 @@ async def handle_scenario_validate(arguments: dict[str, Any]) -> list[TextConten
     )]
 
 
+def convert_floats_to_decimal(obj: Any) -> Any:
+    """DynamoDB 호환을 위해 float를 Decimal로 변환하는 재귀 함수"""
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    elif isinstance(obj, dict):
+        return {key: convert_floats_to_decimal(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_floats_to_decimal(item) for item in obj]
+    else:
+        return obj
+
+
 async def handle_scenario_assign(arguments: dict[str, Any]) -> list[TextContent]:
     """Handle scenario_assign tool."""
     user_ern = arguments.get("user_ern", "")
@@ -1277,6 +1301,12 @@ async def handle_scenario_assign(arguments: dict[str, Any]) -> list[TextContent]
             text=json.dumps({"error": "Either scenario or template_id is required"}, ensure_ascii=False)
         )]
     
+    # scenario_id가 없거나 비어있으면 자동 생성
+    scenario_id = scenario.get("scenario_id", "").strip()
+    if not scenario_id:
+        scenario_id = f"SCENARIO_{uuid.uuid4().hex[:8].upper()}"
+        scenario["scenario_id"] = scenario_id
+    
     # DynamoDB 저장 시도
     try:
         import boto3
@@ -1292,9 +1322,43 @@ async def handle_scenario_assign(arguments: dict[str, Any]) -> list[TextContent]
         
         table = dynamodb.Table(table_name)
         
+        # 기존 user_ern이 있는지 확인
+        existing_item = None
+        try:
+            response = table.get_item(Key={"user_ern": user_ern})
+            existing_item = response.get("Item")
+        except Exception as e:
+            logger.warning(f"기존 항목 조회 실패 (무시하고 계속 진행): {str(e)}")
+        
+        # 기존 항목이 있고 scenario_config가 있으면 최신 scenario 사용
+        if existing_item and existing_item.get("scenario_config"):
+            existing_scenario = existing_item.get("scenario_config", {})
+            existing_scenario_id = existing_scenario.get("scenario_id", "")
+            
+            # 기존 scenario_id가 있으면 사용, 없으면 새로 생성
+            if existing_scenario_id:
+                scenario_id = existing_scenario_id
+                scenario["scenario_id"] = scenario_id
+                logger.info(f"기존 시나리오 발견: {scenario_id}, 최신 시나리오로 업데이트합니다.")
+            else:
+                logger.info(f"기존 항목이 있지만 scenario_id가 없습니다. 새 시나리오를 생성합니다.")
+        
+        # float를 Decimal로 변환
+        scenario_converted = convert_floats_to_decimal(scenario)
+        
+        # scenario_id를 최상위 레벨에도 포함 (DynamoDB 테이블 스키마 요구사항)
+        # scenario_converted에도 scenario_id가 포함되어 있는지 확인
+        if not scenario_converted.get("scenario_id"):
+            scenario_converted["scenario_id"] = scenario_id
+        
+        # 할당 시간 추가 (ISO 8601 형식)
+        assigned_at = datetime.now(timezone.utc).isoformat()
+        
         item = {
             "user_ern": user_ern,
-            "scenario_config": scenario,
+            "scenario_id": scenario_id,
+            "scenario_config": scenario_converted,
+            "assigned_at": assigned_at,
         }
         
         table.put_item(Item=item)
