@@ -27,6 +27,16 @@ class CertType(str, Enum):
     SHINHAN = "shinhan"
 
 
+class LoginMethod(str, Enum):
+    """로그인 방식"""
+    # 개인용
+    SIMPLE_AUTH = "simple_auth"  # 간편인증서 (카카오/네이버)
+    COMMON_CERT = "common_cert"  # 공동인증서
+    # 법인용
+    CORP_COMMON_CERT = "corp_common_cert"  # 공동인증서
+    CORP_ID_PW = "corp_id_pw"  # ID/PW
+
+
 class ErrorType(str, Enum):
     """에러 타입 (샘플 데이터 기반 - 빈도순)"""
     # Load 액션 에러 (샘플 데이터 기반 - 16,338건)

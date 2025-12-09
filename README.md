@@ -26,7 +26,7 @@ Mock ItrLoader 프로젝트의 시나리오를 생성하고 관리하는 MCP(Mod
 |------|------|------|
 | `scenario_build_simple_auth` | [개인] 간편인증 flow 시나리오 생성 | cert_request → cert_response → check → load |
 | `scenario_build_common_cert` | [개인] 공동인증서 flow 시나리오 생성 | check (common_cert) → load |
-| `scenario_build_corp_common_cert` | [법인] 공동인증서 flow 시나리오 생성 | corp_check (common_cert) → corp_load_calc |
+| `scenario_build_corp_common_cert` | [법인] 공동인증서 또는 ID/PW flow 시나리오 생성 | corp_check (common_cert 또는 id/pw) → corp_load_calc |
 
 #### 실패 시나리오 생성 도구
 
@@ -158,6 +158,8 @@ AI: template_list 도구를 사용합니다.
 
 ### 시나리오 생성
 
+#### 기본 시나리오 생성 (로그인 방식 선택 가능)
+
 ```
 사용자: "300만원 환급 시나리오 만들어줘"
 
@@ -167,6 +169,55 @@ AI: scenario_build_normal 도구를 사용합니다.
 - 사용자: 테스트사용자
 - 환급액: 3,000,000원
 - 사업자 유형: 개인사업자
+- 로그인 방식: 간편인증 (기본값)
+```
+
+#### 로그인 방식 지정
+
+**개인 - 간편인증 (카카오/네이버)**
+```
+사용자: "간편인증(네이버)으로 300만원 환급 시나리오 만들어줘"
+
+AI: scenario_build_normal 도구를 사용합니다 (login_method: simple_auth, cert_type: naver).
+
+생성된 시나리오:
+- Flow: cert_request → cert_response → check → load
+- 간편인증: 네이버
+- 환급액: 3,000,000원
+```
+
+**개인 - 공동인증서**
+```
+사용자: "공동인증서로 300만원 환급 시나리오 만들어줘"
+
+AI: scenario_build_normal 도구를 사용합니다 (login_method: common_cert).
+
+생성된 시나리오:
+- Flow: check (common_cert) → load
+- 환급액: 3,000,000원
+```
+
+**법인 - 공동인증서**
+```
+사용자: "법인 공동인증서로 시나리오 만들어줘"
+
+AI: scenario_build_normal 도구를 사용합니다 (biz_type: corp, login_method: corp_common_cert).
+
+생성된 시나리오:
+- Flow: corp_check (common_cert) → corp_load_calc
+- 사업자 유형: 법인
+```
+
+**법인 - ID/PW**
+```
+사용자: "법인 ID/PW로 시나리오 만들어줘"
+
+AI: scenario_build_normal 도구를 사용합니다 (biz_type: corp, login_method: corp_id_pw).
+
+생성된 시나리오:
+- Flow: corp_check (id/pw) → corp_load_calc
+- 사업자 유형: 법인
+- 로그인 방식: ID/PW
 ```
 
 ### Flow별 시나리오 생성
@@ -207,6 +258,21 @@ AI: scenario_build_corp_common_cert 도구를 사용합니다.
 생성된 시나리오:
 - Flow: corp_check (common_cert) → corp_load_calc
 - 사업체명: 주식회사 테스트사업자
+- 로그인 방식: 공동인증서
+```
+
+#### ID/PW Flow (법인)
+
+```
+사용자: "법인 ID/PW 시나리오 만들어줘"
+
+AI: scenario_build_corp_common_cert 도구를 사용합니다 (login_method: corp_id_pw).
+
+생성된 시나리오:
+- Flow: corp_check (id/pw) → corp_load_calc
+- 사업체명: 주식회사 테스트사업자
+- 로그인 방식: ID/PW
+- 홈택스 ID/PW 사용
 ```
 
 ### 실패 시나리오 생성
@@ -301,16 +367,47 @@ mypy src
 ```
 사용자정보입력 → cert_request → 사용자 인증완료 → cert_response → check (token) → load
 ```
+- **로그인 방식**: `simple_auth`
+- **간편인증 유형**: `kakao` 또는 `naver`
+- **액션 순서**: cert_request → cert_response → check → load
 
 #### 2. [개인] 공동인증서 Flow
 ```
 인증서정보 → check (common_cert) → load
 ```
+- **로그인 방식**: `common_cert`
+- **액션 순서**: check → load
 
 #### 3. [법인] 공동인증서 Flow
 ```
 인증서정보 → corp_check (common_cert) → corp_load_calc
 ```
+- **로그인 방식**: `corp_common_cert`
+- **액션 순서**: corp_check → corp_load_calc
+
+#### 4. [법인] ID/PW Flow
+```
+홈택스 ID/PW → corp_check (id/pw) → corp_load_calc
+```
+- **로그인 방식**: `corp_id_pw`
+- **액션 순서**: corp_check → corp_load_calc
+- **필수 파라미터**: `id`, `pw`, `resno` (주민번호 앞7자리)
+
+### 로그인 방식 선택 가이드
+
+#### 개인 로그인 방식
+- **간편인증서 (`simple_auth`)**: 카카오톡 또는 네이버 간편인증 사용
+  - `cert_type`: `kakao` 또는 `naver`
+  - Flow: cert_request → cert_response → check → load
+- **공동인증서 (`common_cert`)**: 공동인증서 사용
+  - Flow: check → load
+
+#### 법인 로그인 방식
+- **공동인증서 (`corp_common_cert`)**: 공동인증서 사용
+  - Flow: corp_check → corp_load_calc
+- **ID/PW (`corp_id_pw`)**: 홈택스 ID/PW 사용
+  - Flow: corp_check → corp_load_calc
+  - 필수 파라미터: `id`, `pw`, `resno`
 
 ### 주요 에러 타입
 

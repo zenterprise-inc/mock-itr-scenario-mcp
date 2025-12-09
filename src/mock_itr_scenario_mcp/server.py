@@ -19,7 +19,7 @@ from mcp.types import (
     ResourceTemplate,
 )
 
-from .models.enums import BizType, CertType, ErrorType, ERROR_MESSAGES, ERROR_MESSAGES_ALT, ERROR_DEFAULT_ACTION, ActionType, CorpType, ProgressValue, ERROR_FREQUENCY, get_error_message
+from .models.enums import BizType, CertType, ErrorType, ERROR_MESSAGES, ERROR_MESSAGES_ALT, ERROR_DEFAULT_ACTION, ActionType, CorpType, ProgressValue, ERROR_FREQUENCY, get_error_message, LoginMethod
 from .models.scenario import (
     ScenarioConfig,
     UserInfo,
@@ -520,6 +520,18 @@ async def list_tools() -> list[Tool]:
                         "enum": ["individual_biz", "non_biz", "corp"],
                         "default": "individual_biz"
                     },
+                    "login_method": {
+                        "type": "string",
+                        "description": "로그인 방식 (개인: simple_auth, common_cert / 법인: corp_common_cert, corp_id_pw)",
+                        "enum": ["simple_auth", "common_cert", "corp_common_cert", "corp_id_pw"],
+                        "default": "simple_auth"
+                    },
+                    "cert_type": {
+                        "type": "string",
+                        "description": "간편인증 유형 (login_method가 simple_auth일 때만 사용)",
+                        "enum": ["kakao", "naver"],
+                        "default": "kakao"
+                    },
                     "창중감_환급액": {
                         "type": "integer",
                         "description": "창업중소기업감면 환급액",
@@ -725,7 +737,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="scenario_build_corp_common_cert",
-            description="[법인] 공동인증서 flow 시나리오를 생성합니다. (check -> corp_load_calc)",
+            description="[법인] 공동인증서 또는 ID/PW flow 시나리오를 생성합니다. (corp_check -> corp_load_calc)",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -743,6 +755,27 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": "대표자명",
                         "default": "테스트대표자"
+                    },
+                    "login_method": {
+                        "type": "string",
+                        "description": "로그인 방식",
+                        "enum": ["corp_common_cert", "corp_id_pw"],
+                        "default": "corp_common_cert"
+                    },
+                    "id": {
+                        "type": "string",
+                        "description": "홈택스 아이디 (login_method가 corp_id_pw일 때만 사용)",
+                        "default": ""
+                    },
+                    "pw": {
+                        "type": "string",
+                        "description": "홈택스 비밀번호 (login_method가 corp_id_pw일 때만 사용)",
+                        "default": ""
+                    },
+                    "resno": {
+                        "type": "string",
+                        "description": "주민번호 앞7자리 (login_method가 corp_id_pw일 때만 사용)",
+                        "default": ""
                     }
                 }
             }
@@ -924,8 +957,11 @@ async def handle_scenario_build_normal(arguments: dict[str, Any]) -> list[TextCo
     user_name = arguments.get("user_name", "테스트사용자")
     total_refund = arguments.get("total_refund", 0)
     biz_type_str = arguments.get("biz_type", "individual_biz")
+    login_method_str = arguments.get("login_method", "simple_auth")
+    cert_type_str = arguments.get("cert_type", "kakao")
     
     biz_type = BizType(biz_type_str)
+    login_method = LoginMethod(login_method_str)
     
     # 환급 항목
     창중감 = arguments.get("창중감_환급액", 0)
@@ -989,42 +1025,190 @@ async def handle_scenario_build_normal(arguments: dict[str, Any]) -> list[TextCo
         양도세_환급액=양도세,
     )
     
-    # check 액션 요청/응답 데이터 생성
-    check_request = build_check_request_data(user_ern="")
-    check_response = build_check_response(
-        success=True,
-        tin=taxpayer_info.tin,
-    )
-    
-    # load 액션 요청/응답 데이터 생성
-    load_request = build_load_request_data(
-        cookies=check_response.get("result", {}).get("cookies"),
-        export_file_prefix=taxpayer_info.tin,
-    )
-    load_response = build_load_response(
-        success=True,
-        refund_result=refund_result,
-        taxpayer_info=taxpayer_info,
-    )
-    
-    scenario = ScenarioConfig(
-        scenario_name=f"정상환급_{user_name}_{total_refund}원",
-        description=f"{user_name}의 정상 환급 시나리오 (총 {total_refund:,}원)",
-        user_info=user_info,
-        taxpayer_info=taxpayer_info,
-        biz_type=biz_type,
-        refund_result=refund_result,
-        check_config=ActionConfig(
+    # 법인인 경우
+    if biz_type == BizType.CORP:
+        # 법인 로그인 방식에 따라 시나리오 생성
+        if login_method == LoginMethod.CORP_COMMON_CERT:
+            # 공동인증서 방식
+            common_cert = CommonCert(
+                sign_cert="base64_encoded_cert...",
+                sign_pri="base64_encoded_pri...",
+                sign_pw="cert_password",
+            )
+            corp_check_request = build_corp_check_request_data(
+                common_cert=common_cert,
+            )
+        else:  # CORP_ID_PW
+            # ID/PW 방식
+            corp_check_request = build_corp_check_request_data(
+                id=arguments.get("id", "test_id"),
+                pw=arguments.get("pw", "test_pw"),
+                resno=arguments.get("resno", "1234567"),
+            )
+        
+        corp_check_response = build_corp_check_response(
             success=True,
-            request_data=check_request,
-            response_data=check_response,
-        ),
-        load_config=ActionConfig(
+            biz_name=arguments.get("biz_name", "주식회사 테스트사업자"),
+            biz_no=arguments.get("biz_no", "1234104321"),
+            ceo_name=arguments.get("ceo_name", "테스트대표자"),
+            tin=taxpayer_info.tin,
+        )
+        
+        corp_load_calc_request = build_corp_load_calc_request_data(
+            cookies=corp_check_response.get("result", {}).get("cookies"),
+            export_file_prefix=taxpayer_info.tin,
+            tin=taxpayer_info.tin,
+        )
+        corp_load_calc_response = build_corp_load_calc_response(
             success=True,
-            request_data=load_request,
-            response_data=load_response,
-        ),
-    )
+            result_data={
+                "계산결과": {
+                    "총납부세액": 0.0,
+                    "미래절세효과": 0.0,
+                }
+            }
+        )
+        
+        scenario = ScenarioConfig(
+            scenario_name=f"법인정상환급_{user_name}_{total_refund}원",
+            description=f"[법인] {login_method.value} 로그인: {user_name}의 정상 환급 시나리오 (총 {total_refund:,}원)",
+            user_info=user_info,
+            taxpayer_info=taxpayer_info,
+            biz_type=biz_type,
+            refund_result=refund_result,
+            corp_check_config=ActionConfig(
+                success=True,
+                request_data=corp_check_request,
+                response_data=corp_check_response,
+            ),
+            corp_load_calc_config=ActionConfig(
+                success=True,
+                request_data=corp_load_calc_request,
+                response_data=corp_load_calc_response,
+            ),
+        )
+        
+        # scenario_id가 없으면 자동 생성
+        if not scenario.scenario_id:
+            scenario.scenario_id = f"CORP_{uuid.uuid4().hex[:8].upper()}"
+        
+        return [TextContent(
+            type="text",
+            text=json.dumps(scenario.to_dict(), ensure_ascii=False, indent=2)
+        )]
+    
+    # 개인사업자인 경우
+    # 로그인 방식에 따라 시나리오 생성
+    if login_method == LoginMethod.SIMPLE_AUTH:
+        # 간편인증 방식: cert_request -> cert_response -> check -> load
+        user_info.cert_type = cert_type_str
+        cert_info = CertInfo(
+            cert_type=CertType(cert_type_str),
+            req_tx_id="7cd3...",
+            token="eyJh...",
+            cx_id="10db...",
+        )
+        
+        # 1. cert_request
+        cert_request_data = build_cert_request_data(user_info=user_info)
+        cert_request_response = build_cert_request_response(success=True, cert_info=cert_info)
+        
+        # 2. cert_response
+        cert_response_data = build_cert_response_data(user_info=user_info, cert_info=cert_info)
+        auth_token = "eyJh..."
+        cert_response_response = build_cert_response_response(success=True, token=auth_token)
+        
+        # 3. check
+        check_request = build_check_request_data(token=auth_token)
+        check_response = build_check_response(
+            success=True,
+            tin=taxpayer_info.tin,
+        )
+        
+        # 4. load
+        load_request = build_load_request_data(
+            cookies=check_response.get("result", {}).get("cookies"),
+            export_file_prefix=taxpayer_info.tin,
+        )
+        load_response = build_load_response(
+            success=True,
+            refund_result=refund_result,
+            taxpayer_info=taxpayer_info,
+        )
+        
+        scenario = ScenarioConfig(
+            scenario_name=f"정상환급_간편인증_{user_name}_{total_refund}원",
+            description=f"[개인] 간편인증({cert_type_str}) 로그인: {user_name}의 정상 환급 시나리오 (총 {total_refund:,}원)",
+            user_info=user_info,
+            taxpayer_info=taxpayer_info,
+            cert_info=cert_info,
+            biz_type=biz_type,
+            refund_result=refund_result,
+            cert_request_config=ActionConfig(
+                success=True,
+                request_data=cert_request_data,
+                response_data=cert_request_response,
+            ),
+            cert_response_config=ActionConfig(
+                success=True,
+                request_data=cert_response_data,
+                response_data=cert_response_response,
+            ),
+            check_config=ActionConfig(
+                success=True,
+                request_data=check_request,
+                response_data=check_response,
+            ),
+            load_config=ActionConfig(
+                success=True,
+                request_data=load_request,
+                response_data=load_response,
+            ),
+        )
+    else:  # COMMON_CERT
+        # 공동인증서 방식: check -> load
+        common_cert = CommonCert(
+            sign_cert="base64_encoded_cert...",
+            sign_pri="base64_encoded_pri...",
+            sign_pw="cert_password",
+        )
+        
+        # 1. check
+        check_request = build_check_request_data(common_cert=common_cert)
+        check_response = build_check_response(
+            success=True,
+            tin=taxpayer_info.tin,
+        )
+        
+        # 2. load
+        load_request = build_load_request_data(
+            cookies=check_response.get("result", {}).get("cookies"),
+            export_file_prefix=taxpayer_info.tin,
+        )
+        load_response = build_load_response(
+            success=True,
+            refund_result=refund_result,
+            taxpayer_info=taxpayer_info,
+        )
+        
+        scenario = ScenarioConfig(
+            scenario_name=f"정상환급_공동인증서_{user_name}_{total_refund}원",
+            description=f"[개인] 공동인증서 로그인: {user_name}의 정상 환급 시나리오 (총 {total_refund:,}원)",
+            user_info=user_info,
+            taxpayer_info=taxpayer_info,
+            biz_type=biz_type,
+            refund_result=refund_result,
+            check_config=ActionConfig(
+                success=True,
+                request_data=check_request,
+                response_data=check_response,
+            ),
+            load_config=ActionConfig(
+                success=True,
+                request_data=load_request,
+                response_data=load_response,
+            ),
+        )
     
     # scenario_id가 없으면 자동 생성
     if not scenario.scenario_id:
@@ -1603,24 +1787,43 @@ async def handle_scenario_build_common_cert(arguments: dict[str, Any]) -> list[T
 
 
 async def handle_scenario_build_corp_common_cert(arguments: dict[str, Any]) -> list[TextContent]:
-    """[법인] 공동인증서 flow 시나리오 생성: corp_check -> corp_load_calc"""
+    """[법인] 공동인증서 또는 ID/PW flow 시나리오 생성: corp_check -> corp_load_calc"""
     biz_name = arguments.get("biz_name", "주식회사 테스트사업자")
     biz_no = arguments.get("biz_no", "1234104321")
     ceo_name = arguments.get("ceo_name", "테스트대표자")
+    login_method_str = arguments.get("login_method", "corp_common_cert")
     
+    login_method = LoginMethod(login_method_str)
     taxpayer_info = TaxpayerInfo()
     
-    # 공동인증서 정보
-    common_cert = CommonCert(
-        sign_cert="base64_encoded_cert...",
-        sign_pri="base64_encoded_pri...",
-        sign_pw="cert_password",
-    )
+    # 로그인 방식에 따라 요청 데이터 생성
+    if login_method == LoginMethod.CORP_COMMON_CERT:
+        # 공동인증서 정보
+        common_cert = CommonCert(
+            sign_cert="base64_encoded_cert...",
+            sign_pri="base64_encoded_pri...",
+            sign_pw="cert_password",
+        )
+        
+        # 1. corp_check: 공동인증서로 tin, cookies 반환
+        corp_check_request = build_corp_check_request_data(
+            common_cert=common_cert,
+        )
+        login_desc = "공동인증서"
+    else:  # CORP_ID_PW
+        # ID/PW 방식
+        id = arguments.get("id", "test_id")
+        pw = arguments.get("pw", "test_pw")
+        resno = arguments.get("resno", "1234567")
+        
+        # 1. corp_check: ID/PW로 tin, cookies 반환
+        corp_check_request = build_corp_check_request_data(
+            id=id,
+            pw=pw,
+            resno=resno,
+        )
+        login_desc = "ID/PW"
     
-    # 1. corp_check: 공동인증서로 tin, cookies 반환
-    corp_check_request = build_corp_check_request_data(
-        common_cert=common_cert,
-    )
     corp_check_response = build_corp_check_response(
         success=True,
         biz_name=biz_name,
@@ -1646,8 +1849,8 @@ async def handle_scenario_build_corp_common_cert(arguments: dict[str, Any]) -> l
     )
     
     scenario = ScenarioConfig(
-        scenario_name=f"법인공동인증서_{biz_name}",
-        description=f"[법인] 공동인증서 flow: {biz_name}의 법인 조회 시나리오",
+        scenario_name=f"법인_{login_desc}_{biz_name}",
+        description=f"[법인] {login_desc} flow: {biz_name}의 법인 조회 시나리오",
         taxpayer_info=taxpayer_info,
         biz_type=BizType.CORP,
         corp_check_config=ActionConfig(
